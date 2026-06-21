@@ -1,0 +1,4 @@
+manim>=0.17.0
+pillow
+numpy
+opencv-python
