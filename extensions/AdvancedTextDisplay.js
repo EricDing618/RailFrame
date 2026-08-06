@@ -13,10 +13,45 @@
         constructor() {
             this.texts = new Map();
             this.groups = new Map();
+            this.stageObserver = null;
+            this._setupStageResizeObserver();
+        }
+
+        // ---------- 监听舞台尺寸变化 ----------
+        _setupStageResizeObserver() {
+            if (typeof ResizeObserver === 'undefined') {
+                window.addEventListener('resize', () => this._repositionAllTexts());
+                return;
+            }
+
+            const waitForStage = () => {
+                const stageEl = document.getElementById('stage') || document.querySelector('canvas');
+                if (stageEl) {
+                    this.stageObserver = new ResizeObserver(() => {
+                        this._repositionAllTexts();
+                    });
+                    this.stageObserver.observe(stageEl);
+                } else {
+                    setTimeout(waitForStage, 100);
+                }
+            };
+            waitForStage();
+        }
+
+        _repositionAllTexts() {
+            for (const [id, entry] of this.texts) {
+                if (entry.div) {
+                    this._setPosition(entry.div, entry.x, entry.y);
+                }
+            }
+            for (const [groupId, group] of this.groups) {
+                for (const textId of group.members) {
+                    this._applyGroupPositionToText(groupId, textId);
+                }
+            }
         }
 
         // ---------- 私有辅助方法 ----------
-
         _isTextExists(id) {
             return this.texts.has(id);
         }
@@ -88,28 +123,19 @@
             return div;
         }
 
-        // 改进的舞台坐标映射
         _stageToViewport(x, y) {
-            // 尝试多种方式获取舞台元素
             let stageEl = document.getElementById('stage');
             if (!stageEl) {
-                // 尝试查找 canvas（TurboWarp 可能直接用 canvas）
                 stageEl = document.querySelector('canvas');
-                // 如果 canvas 存在，且其父元素可能是舞台容器，我们直接使用 canvas
             }
             if (!stageEl) {
-                // 尝试通过类名查找
                 stageEl = document.querySelector('.stage-wrapper, .stage-container');
             }
 
             if (stageEl) {
                 const rect = stageEl.getBoundingClientRect();
-                // 如果获取到的是 canvas，其尺寸可能和舞台逻辑尺寸不同，但比例一致
-                // 我们仍使用逻辑尺寸 480x360，因为TurboWarp的逻辑坐标系固定
-                // 但为了更准确，可以使用 rect.width/480 和 rect.height/360 作为比例
                 const width = rect.width;
                 const height = rect.height;
-                // 如果 width 或 height 为 0，回退到默认
                 if (width > 0 && height > 0) {
                     const cx = rect.left + ((x || 0) + 240) / 480 * width;
                     const cy = rect.top + (180 - (y || 0)) / 360 * height;
@@ -117,7 +143,6 @@
                 }
             }
 
-            // 如果都获取不到，输出警告并居中显示
             console.warn('AdvancedTextDisplay: 未能获取舞台元素，文字将居中显示');
             return { left: window.innerWidth / 2, top: window.innerHeight / 2 };
         }
