@@ -1,22 +1,26 @@
+// Name: Advanced Text Display
+// ID: advancedtextdisplay
+// Description: Display and animate text with independent objects, groups, and typewriter effects.
+// By: Your Name
+// License: MIT
+
 (function (Scratch) {
     'use strict';
 
+    Scratch.translate.setup({});
+
     class AdvancedTextDisplay {
         constructor() {
-            // 存储所有文字对象: textId -> { div, animationId, typeTimer, fullText, ... }
             this.texts = new Map();
-            // 存储所有组: groupId -> { members: Set<textId>, align, baseX, baseY, offsets: Map<textId, {dx, dy}> }
             this.groups = new Map();
         }
 
         // ---------- 私有辅助方法 ----------
 
-        // 检查文字是否存在
         _isTextExists(id) {
             return this.texts.has(id);
         }
 
-        // 取消透明度动画
         _cancelAnimation(id) {
             const entry = this.texts.get(id);
             if (entry && entry.animationId) {
@@ -30,7 +34,6 @@
             }
         }
 
-        // 取消逐字打印定时器
         _cancelTypeTimer(id) {
             const entry = this.texts.get(id);
             if (entry && entry.typeTimer) {
@@ -44,7 +47,6 @@
             }
         }
 
-        // 从所有组中移除文字引用
         _removeTextFromGroups(textId) {
             for (const [, group] of this.groups) {
                 if (group.members.has(textId)) {
@@ -53,7 +55,6 @@
             }
         }
 
-        // 删除文字
         _removeText(id) {
             const entry = this.texts.get(id);
             if (entry) {
@@ -67,7 +68,6 @@
             }
         }
 
-        // 创建文字DOM元素
         _createDiv() {
             const div = document.createElement('div');
             div.style.position = 'fixed';
@@ -88,23 +88,40 @@
             return div;
         }
 
-        // 将舞台坐标转换为视口坐标
+        // 改进的舞台坐标映射
         _stageToViewport(x, y) {
-            const stageCanvas = document.getElementById('stage');
-            if (stageCanvas) {
-                const rect = stageCanvas.getBoundingClientRect();
-                // 舞台逻辑尺寸: 480x360, 坐标系: X -240~240, Y -180~180 (Y向上)
-                const cx = rect.left + ((x || 0) + 240) / 480 * rect.width;
-                const cy = rect.top + (180 - (y || 0)) / 360 * rect.height;
-                return { left: cx, top: cy };
-            } else {
-                // 如果找不到舞台，居中显示
-                console.warn('AdvancedTextDisplay: 未找到舞台元素，文字将居中显示');
-                return { left: window.innerWidth / 2, top: window.innerHeight / 2 };
+            // 尝试多种方式获取舞台元素
+            let stageEl = document.getElementById('stage');
+            if (!stageEl) {
+                // 尝试查找 canvas（TurboWarp 可能直接用 canvas）
+                stageEl = document.querySelector('canvas');
+                // 如果 canvas 存在，且其父元素可能是舞台容器，我们直接使用 canvas
             }
+            if (!stageEl) {
+                // 尝试通过类名查找
+                stageEl = document.querySelector('.stage-wrapper, .stage-container');
+            }
+
+            if (stageEl) {
+                const rect = stageEl.getBoundingClientRect();
+                // 如果获取到的是 canvas，其尺寸可能和舞台逻辑尺寸不同，但比例一致
+                // 我们仍使用逻辑尺寸 480x360，因为TurboWarp的逻辑坐标系固定
+                // 但为了更准确，可以使用 rect.width/480 和 rect.height/360 作为比例
+                const width = rect.width;
+                const height = rect.height;
+                // 如果 width 或 height 为 0，回退到默认
+                if (width > 0 && height > 0) {
+                    const cx = rect.left + ((x || 0) + 240) / 480 * width;
+                    const cy = rect.top + (180 - (y || 0)) / 360 * height;
+                    return { left: cx, top: cy };
+                }
+            }
+
+            // 如果都获取不到，输出警告并居中显示
+            console.warn('AdvancedTextDisplay: 未能获取舞台元素，文字将居中显示');
+            return { left: window.innerWidth / 2, top: window.innerHeight / 2 };
         }
 
-        // 设置文字位置
         _setPosition(div, x, y) {
             const pos = this._stageToViewport(x, y);
             div.style.left = pos.left + 'px';
@@ -112,7 +129,6 @@
             div.style.transform = 'translate(-50%, -50%)';
         }
 
-        // 获取组内目标文字列表
         _getTargetTexts(groupId, textId) {
             const group = this.groups.get(groupId);
             if (!group) return [];
@@ -122,7 +138,6 @@
             return Array.from(group.members);
         }
 
-        // 应用组对齐方式到单个文字
         _applyAlignToText(textId, align) {
             const entry = this.texts.get(textId);
             if (entry) {
@@ -130,7 +145,6 @@
             }
         }
 
-        // 应用组基准位置+偏移到单个文字
         _applyGroupPositionToText(groupId, textId) {
             const group = this.groups.get(groupId);
             if (!group) return;
@@ -145,14 +159,10 @@
         }
 
         // ---------- 积木实现 ----------
-
-        // 1. 创建文字
         createText(args) {
             const { ID, TEXT } = args;
             const id = ID || 'default';
-            if (this._isTextExists(id)) {
-                this._removeText(id);
-            }
+            if (this._isTextExists(id)) this._removeText(id);
             const div = this._createDiv();
             div.innerText = TEXT || '';
             this._setPosition(div, 0, 0);
@@ -179,7 +189,6 @@
             this.texts.set(id, entry);
         }
 
-        // 2. 设置文字样式
         setStyle(args) {
             const { ID, SIZE, FONT, BOLD, COLOR } = args;
             const id = ID || 'default';
@@ -204,7 +213,6 @@
             }
         }
 
-        // 3. 设置文字位置
         setPosition(args) {
             const { ID, X, Y } = args;
             const id = ID || 'default';
@@ -218,7 +226,6 @@
             entry.y = y;
         }
 
-        // 4. 设置文字透明度
         setOpacity(args) {
             const { ID, OPACITY } = args;
             const id = ID || 'default';
@@ -230,7 +237,6 @@
             entry.opacity = opacity;
         }
 
-        // 5. 播放透明度动画
         playFade(args) {
             const { ID, START, END, DURATION } = args;
             const id = ID || 'default';
@@ -284,13 +290,11 @@
             entry.animationId = requestAnimationFrame(animate);
         }
 
-        // 6. 逐字打印
         typeText(args) {
             const { ID, TEXT, INTERVAL } = args;
             const id = ID || 'default';
             let entry = this.texts.get(id);
             if (!entry) {
-                // 自动创建
                 const div = this._createDiv();
                 div.innerText = '';
                 this._setPosition(div, 0, 0);
@@ -362,7 +366,6 @@
             typeNext();
         }
 
-        // 7. 暂停逐字打印
         stopTypeText(args) {
             const { ID } = args;
             const id = ID || 'default';
@@ -370,7 +373,6 @@
             this._cancelTypeTimer(id);
         }
 
-        // 8. 立即显示完整文字
         finishTypeText(args) {
             const { ID } = args;
             const id = ID || 'default';
@@ -386,15 +388,11 @@
             }
         }
 
-        // 9. 清除文字
         clearTextById(args) {
             const { ID } = args;
-            if (ID) {
-                this._removeText(ID);
-            }
+            if (ID) this._removeText(ID);
         }
 
-        // 10. 清除所有文字
         clearAllTexts() {
             for (const id of this.texts.keys()) {
                 this._removeText(id);
@@ -403,8 +401,6 @@
         }
 
         // ---------- 组操作 ----------
-
-        // 11. 创建组
         createGroup(args) {
             const { ID } = args;
             if (!ID) return;
@@ -417,7 +413,6 @@
             });
         }
 
-        // 12. 添加文字到组
         addTextToGroup(args) {
             const { GROUP_ID, TEXT_ID } = args;
             if (!GROUP_ID || !TEXT_ID) return;
@@ -432,7 +427,6 @@
             this._applyGroupPositionToText(GROUP_ID, TEXT_ID);
         }
 
-        // 13. 从组移除文字
         removeTextFromGroup(args) {
             const { GROUP_ID, TEXT_ID } = args;
             if (!GROUP_ID || !TEXT_ID) return;
@@ -442,7 +436,6 @@
             group.offsets.delete(TEXT_ID);
         }
 
-        // 14. 设置组对齐方式
         setGroupAlign(args) {
             const { GROUP_ID, ALIGN } = args;
             if (!GROUP_ID) return;
@@ -455,7 +448,6 @@
             }
         }
 
-        // 15. 设置组基准位置
         setGroupBasePosition(args) {
             const { GROUP_ID, X, Y } = args;
             if (!GROUP_ID) return;
@@ -468,7 +460,6 @@
             }
         }
 
-        // 16. 设置组内文字偏移
         setTextOffsetInGroup(args) {
             const { GROUP_ID, TEXT_ID, DX, DY } = args;
             if (!GROUP_ID || !TEXT_ID) return;
@@ -485,7 +476,6 @@
             this._applyGroupPositionToText(GROUP_ID, TEXT_ID);
         }
 
-        // 17. 组内批量设置样式
         setGroupStyle(args) {
             const { GROUP_ID, TEXT_ID, SIZE, FONT, BOLD, COLOR } = args;
             if (!GROUP_ID) return;
@@ -495,7 +485,6 @@
             }
         }
 
-        // 18. 组内批量设置位置
         setGroupPosition(args) {
             const { GROUP_ID, TEXT_ID, X, Y } = args;
             if (!GROUP_ID) return;
@@ -505,7 +494,6 @@
             }
         }
 
-        // 19. 组内批量设置透明度
         setGroupOpacity(args) {
             const { GROUP_ID, TEXT_ID, OPACITY } = args;
             if (!GROUP_ID) return;
@@ -515,7 +503,6 @@
             }
         }
 
-        // 20. 组内批量播放透明度动画
         playGroupFade(args) {
             const { GROUP_ID, TEXT_ID, START, END, DURATION } = args;
             if (!GROUP_ID) return;
@@ -525,7 +512,6 @@
             }
         }
 
-        // 21. 组内逐字打印
         typeGroupText(args) {
             const { GROUP_ID, TEXT_ID, TEXT, INTERVAL } = args;
             if (!GROUP_ID) return;
@@ -535,7 +521,6 @@
             }
         }
 
-        // 22. 等待所有文字动画完成（异步积木）
         waitForAllAnimations() {
             const promises = [];
             for (const [, entry] of this.texts) {
@@ -546,45 +531,43 @@
                     promises.push(entry.typePromise);
                 }
             }
-            // 官方异步积木标准写法：返回一个Promise[reference:8]
             return Promise.all(promises);
         }
 
         // ---------- 扩展元数据 ----------
-
         getInfo() {
             return {
                 id: 'advancedtextdisplay',
-                name: '🎨 高级文字（组+打印+并行）',
+                name: Scratch.translate('Advanced Text Display'),
                 color1: '#FF6B00',
                 color2: '#D64B00',
                 blocks: [
-                    // ----- 单个文字操作 -----
+                    // 单个文字
                     {
                         opcode: 'createText',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '创建文字 ID:[ID] 内容:[TEXT]',
+                        text: Scratch.translate('create text [ID] with [TEXT]'),
                         arguments: {
                             ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' },
-                            TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: '你好，世界！' }
+                            TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'Hello!' }
                         }
                     },
                     {
                         opcode: 'setStyle',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '设置文字 [ID] 大小[SIZE] 字体[FONT] 粗体?[BOLD] 颜色[COLOR]',
+                        text: Scratch.translate('set text [ID] size [SIZE] font [FONT] bold? [BOLD] color [COLOR]'),
                         arguments: {
                             ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' },
                             SIZE: { type: Scratch.ArgumentType.NUMBER, defaultValue: 48 },
                             FONT: { type: Scratch.ArgumentType.STRING, defaultValue: 'Arial' },
                             BOLD: { type: Scratch.ArgumentType.BOOLEAN, defaultValue: false },
-                            COLOR: { type: Scratch.ArgumentType.STRING, defaultValue: '#FFFFFF' }
+                            COLOR: { type: Scratch.ArgumentType.COLOR, defaultValue: '#FFFFFF' }
                         }
                     },
                     {
                         opcode: 'setPosition',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '设置文字 [ID] 位置 X:[X] Y:[Y]',
+                        text: Scratch.translate('set text [ID] position x:[X] y:[Y]'),
                         arguments: {
                             ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' },
                             X: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 },
@@ -594,7 +577,7 @@
                     {
                         opcode: 'setOpacity',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '设置文字 [ID] 透明度[OPACITY]',
+                        text: Scratch.translate('set text [ID] opacity [OPACITY]%'),
                         arguments: {
                             ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' },
                             OPACITY: { type: Scratch.ArgumentType.NUMBER, defaultValue: 100 }
@@ -603,7 +586,7 @@
                     {
                         opcode: 'playFade',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '播放文字 [ID] 透明度动画从[START]到[END] 用时[DURATION]秒',
+                        text: Scratch.translate('fade text [ID] from [START]% to [END]% in [DURATION] seconds'),
                         arguments: {
                             ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' },
                             START: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 },
@@ -612,34 +595,19 @@
                         }
                     },
                     {
-                        opcode: 'clearTextById',
-                        blockType: Scratch.BlockType.COMMAND,
-                        text: '清除文字 ID:[ID]',
-                        arguments: {
-                            ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' }
-                        }
-                    },
-                    {
-                        opcode: 'clearAllTexts',
-                        blockType: Scratch.BlockType.COMMAND,
-                        text: '清除所有文字'
-                    },
-
-                    // ----- 逐字打印（单个） -----
-                    {
                         opcode: 'typeText',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '逐字打印文字 [ID] 内容:[TEXT] 每个字符间隔[INTERVAL]秒',
+                        text: Scratch.translate('type text [ID] with [TEXT] each [INTERVAL] seconds'),
                         arguments: {
                             ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' },
-                            TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: '你好，世界！' },
+                            TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'Hello!' },
                             INTERVAL: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0.2 }
                         }
                     },
                     {
                         opcode: 'stopTypeText',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '暂停逐字打印 [ID]（保留已显示部分）',
+                        text: Scratch.translate('stop typing text [ID]'),
                         arguments: {
                             ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' }
                         }
@@ -647,17 +615,30 @@
                     {
                         opcode: 'finishTypeText',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '立即显示完整文字 [ID]',
+                        text: Scratch.translate('finish typing text [ID]'),
                         arguments: {
                             ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' }
                         }
                     },
-
-                    // ----- 组管理 -----
+                    {
+                        opcode: 'clearTextById',
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: Scratch.translate('clear text [ID]'),
+                        arguments: {
+                            ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' }
+                        }
+                    },
+                    {
+                        opcode: 'clearAllTexts',
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: Scratch.translate('clear all texts')
+                    },
+                    '---',
+                    // 组操作
                     {
                         opcode: 'createGroup',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '创建组 ID:[ID]',
+                        text: Scratch.translate('create group [ID]'),
                         arguments: {
                             ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'group1' }
                         }
@@ -665,7 +646,7 @@
                     {
                         opcode: 'addTextToGroup',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '将文字 [TEXT_ID] 添加到组 [GROUP_ID]',
+                        text: Scratch.translate('add text [TEXT_ID] to group [GROUP_ID]'),
                         arguments: {
                             TEXT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' },
                             GROUP_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'group1' }
@@ -674,7 +655,7 @@
                     {
                         opcode: 'removeTextFromGroup',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '从组 [GROUP_ID] 移除文字 [TEXT_ID]',
+                        text: Scratch.translate('remove text [TEXT_ID] from group [GROUP_ID]'),
                         arguments: {
                             GROUP_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'group1' },
                             TEXT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' }
@@ -683,7 +664,7 @@
                     {
                         opcode: 'setGroupAlign',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '设置组 [GROUP_ID] 对齐方式 [ALIGN]',
+                        text: Scratch.translate('set group [GROUP_ID] align [ALIGN]'),
                         arguments: {
                             GROUP_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'group1' },
                             ALIGN: {
@@ -696,7 +677,7 @@
                     {
                         opcode: 'setGroupBasePosition',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '设置组 [GROUP_ID] 基准位置 X:[X] Y:[Y]',
+                        text: Scratch.translate('set group [GROUP_ID] base position x:[X] y:[Y]'),
                         arguments: {
                             GROUP_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'group1' },
                             X: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 },
@@ -706,7 +687,7 @@
                     {
                         opcode: 'setTextOffsetInGroup',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '设置组 [GROUP_ID] 内文字 [TEXT_ID] 偏移 DX:[DX] DY:[DY]',
+                        text: Scratch.translate('set text [TEXT_ID] offset in group [GROUP_ID] dx:[DX] dy:[DY]'),
                         arguments: {
                             GROUP_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'group1' },
                             TEXT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'text1' },
@@ -714,25 +695,25 @@
                             DY: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 }
                         }
                     },
-
-                    // ----- 组批量操作 -----
+                    '---',
+                    // 组批量
                     {
                         opcode: 'setGroupStyle',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '设置组 [GROUP_ID] 文字 [TEXT_ID] 大小[SIZE] 字体[FONT] 粗体?[BOLD] 颜色[COLOR]',
+                        text: Scratch.translate('set group [GROUP_ID] text [TEXT_ID] size [SIZE] font [FONT] bold? [BOLD] color [COLOR]'),
                         arguments: {
                             GROUP_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'group1' },
                             TEXT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '' },
                             SIZE: { type: Scratch.ArgumentType.NUMBER, defaultValue: 48 },
                             FONT: { type: Scratch.ArgumentType.STRING, defaultValue: 'Arial' },
                             BOLD: { type: Scratch.ArgumentType.BOOLEAN, defaultValue: false },
-                            COLOR: { type: Scratch.ArgumentType.STRING, defaultValue: '#FFFFFF' }
+                            COLOR: { type: Scratch.ArgumentType.COLOR, defaultValue: '#FFFFFF' }
                         }
                     },
                     {
                         opcode: 'setGroupPosition',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '设置组 [GROUP_ID] 文字 [TEXT_ID] 位置 X:[X] Y:[Y]',
+                        text: Scratch.translate('set group [GROUP_ID] text [TEXT_ID] position x:[X] y:[Y]'),
                         arguments: {
                             GROUP_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'group1' },
                             TEXT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '' },
@@ -743,7 +724,7 @@
                     {
                         opcode: 'setGroupOpacity',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '设置组 [GROUP_ID] 文字 [TEXT_ID] 透明度[OPACITY]',
+                        text: Scratch.translate('set group [GROUP_ID] text [TEXT_ID] opacity [OPACITY]%'),
                         arguments: {
                             GROUP_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'group1' },
                             TEXT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '' },
@@ -753,7 +734,7 @@
                     {
                         opcode: 'playGroupFade',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '播放组 [GROUP_ID] 文字 [TEXT_ID] 透明度动画从[START]到[END] 用时[DURATION]秒',
+                        text: Scratch.translate('fade group [GROUP_ID] text [TEXT_ID] from [START]% to [END]% in [DURATION] seconds'),
                         arguments: {
                             GROUP_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'group1' },
                             TEXT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '' },
@@ -765,20 +746,19 @@
                     {
                         opcode: 'typeGroupText',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '组内逐字打印 [GROUP_ID] 文字 [TEXT_ID] 内容:[TEXT] 每个字符间隔[INTERVAL]秒',
+                        text: Scratch.translate('type group [GROUP_ID] text [TEXT_ID] with [TEXT] each [INTERVAL] seconds'),
                         arguments: {
                             GROUP_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'group1' },
                             TEXT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '' },
-                            TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: '你好，世界！' },
+                            TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'Hello!' },
                             INTERVAL: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0.2 }
                         }
                     },
-
-                    // ----- 并行等待（异步） -----
+                    '---',
                     {
                         opcode: 'waitForAllAnimations',
                         blockType: Scratch.BlockType.COMMAND,
-                        text: '等待所有文字动画完成'
+                        text: Scratch.translate('wait for all text animations to finish')
                     }
                 ],
                 menus: {
@@ -791,6 +771,5 @@
         }
     }
 
-    // 注册扩展（必须且只能调用一次）[reference:9]
     Scratch.extensions.register(new AdvancedTextDisplay());
 })(Scratch);
