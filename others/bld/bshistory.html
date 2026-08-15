@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html style="scroll-behavior:unset;">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>滨蜀的发展史演示器</title>
+    <script src="./vue.global.js"></script>
+    <script src="./lz-string.min.js"></script>
+    <script src="./workstorage-v1.js?v=20260729-hud-temporal-refactor-1"></script>
+    <script>
+        const { createApp,
+            ref,
+            shallowRef,
+            computed,
+            onMounted,
+            onBeforeUnmount,
+            nextTick } = Vue
+    </script>
+    <!-- 只引用必要公共逻辑，不引用 app.js -->
+    <script src="./color-v260514.js"></script>
+    <script src="./math-v260522.js"></script>
+    <script src="./str-v260514.js"></script>
+    <script src="./style-v260527.js"></script>
+    <script src="./gaojia-v2605211.js"></script>
+    
+    <script src="./timevar-v2.js?v=20260729-hud-temporal-refactor-1"></script>
+    <script src="./history-v55.js?v=20260729-line-history-1"></script>
+    <script src="./terrains.js"></script>
+    <style>
+        html,
+        body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #f7f7f7;
+            font-family: Arial, "Microsoft YaHei", sans-serif;
+        }
+
+        #app {
+            width: 100%;
+            height: 100%;
+            user-select: none;
+        }
+
+        .stage {
+            position: fixed;
+            inset: 0;
+            background: #fff;
+        }
+
+        .tool {
+            position: fixed;
+            left: 12px;
+            top: 12px;
+            z-index: 1000;
+            width: 210px;
+            background: rgba(245, 249, 253, .94);
+            border: 1px solid #bfd2e5;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, .18);
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .tool button,
+        .tool select,
+        .tool input {
+            font-size: 14px;
+        }
+
+        .tool button {
+            border: 1px solid #8fb0d2;
+            background: #dcecff;
+            border-radius: 7px;
+            padding: 5px 8px;
+            cursor: pointer;
+        }
+
+        .tool button.primary {
+            background: #4f86c6;
+            color: #fff;
+            border-color: #3e6fa6;
+            font-weight: 700;
+        }
+
+        .tool button.warn {
+            background: #ffe2b8;
+            border-color: #d7a762;
+        }
+
+        .tool .row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .tool .grow {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .tool .timeline {
+            width: 100%;
+        }
+
+        .hide-ui .tool {
+            display: none;
+        }
+
+
+        .debug-panel {
+            position: fixed;
+            left: 244px;
+            top: 12px;
+            z-index: 1200;
+            width: 390px;
+            max-width: calc(100vw - 268px);
+            max-height: calc(100vh - 24px);
+            overflow: auto;
+            background: rgba(255, 255, 255, .97);
+            border: 1px solid #9fb9d3;
+            border-radius: 10px;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, .2);
+            padding: 12px;
+            user-select: text;
+        }
+        .debug-panel h3 { margin: 0 0 8px; font-size: 17px; }
+        .debug-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin-bottom:10px; }
+        .debug-chip { border:1px solid #d4e0eb; border-radius:7px; padding:7px 8px; background:#f6f9fc; font-size:13px; }
+        .debug-chip strong { display:block; font-size:20px; color:#315f8e; }
+        .debug-group { border-top:1px solid #dfe7ef; padding-top:9px; margin-top:9px; }
+        .debug-group-title { display:flex; justify-content:space-between; font-weight:700; margin-bottom:5px; }
+        .debug-action-row { display:flex; justify-content:space-between; gap:10px; padding:3px 0; font-size:13px; border-bottom:1px dashed #edf1f5; }
+        .debug-empty { color:#778899; font-size:13px; }
+        .debug-note { margin-top:9px; color:#667788; font-size:12px; line-height:1.5; }
+        @media (max-width: 700px) {
+            .debug-panel { left:12px; top:245px; width:calc(100vw - 48px); max-width:none; max-height:calc(100vh - 270px); }
+        }
+
+        .settings-mask {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            background: rgba(0, 0, 0, .2);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .settings {
+            width: 560px;
+            max-height: 86vh;
+            overflow: auto;
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, .28);
+            padding: 16px 18px;
+            border: 1px solid #bfd2e5;
+        }
+
+        .settings h2 {
+            margin: 0 0 12px;
+        }
+
+        .settings table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .settings td {
+            padding: 6px 4px;
+            border-bottom: 1px solid #edf2f7;
+            font-size: 14px;
+        }
+
+        .settings input[type="number"] {
+            width: 7em;
+        }
+
+        .settings .large-range {
+            width: 100%;
+            height: 28px;
+        }
+
+        .hud-left {
+            position: fixed;
+            left: 260px;
+            top: 20px;
+            z-index: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 24px;
+            font-weight: 700;
+            pointer-events: none;
+        }
+
+        .line-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 58px;
+            padding: 5px 14px;
+            border-radius: 12px;
+            font-weight: 900;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, .18);
+        }
+
+        .event-desc {
+            color: #111;
+            text-shadow: 0 1px 2px rgba(255, 255, 255, .9);
+        }
+
+        .hud-right {
+            position: fixed;
+            right: 28px;
+            top: 20px;
+            z-index: 500;
+            text-align: right;
+            color: #111;
+            font-weight: 800;
+            text-shadow: 0 1px 3px rgba(255, 255, 255, .95);
+            pointer-events: none;
+        }
+
+        .hud-right .date {
+            font-size: 34px;
+        }
+
+        .hud-right .stat {
+            font-size: 20px;
+            margin-top: 4px;
+        }
+
+        .legend {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: 20px;
+            z-index: 500;
+            display: grid;
+            justify-content: center;
+            pointer-events: none;
+            width: min(96vw, 1800px);
+            box-sizing: border-box;
+        }
+
+        .legend-card {
+            min-width: 0;
+            max-width: 100%;
+            padding: 4px 4px 3px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 7px rgba(0, 0, 0, .18);
+            border: 2px solid transparent;
+            font-weight: 900;
+            line-height: 1.05;
+            overflow: hidden;
+            white-space: nowrap;
+            box-sizing: border-box;
+        }
+
+        .legend-card>div:first-child {
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .legend-card .km {
+            font-size: 0.62em;
+            margin-top: 2px;
+            font-weight: 700;
+            opacity: .92;
+        }
+
+        .legend-card.missing {
+            visibility: hidden;
+        }
+
+        .legend-card.gray {
+            background: #b8b8b8 !important;
+            color: #fff !important;
+            opacity: .65;
+        }
+
+        .minimap-canvas {
+            position: fixed;
+            right: 12px;
+            top: 12px;
+            z-index: 500;
+            border-radius: 8px;
+            box-shadow: 0 2px 14px rgba(0, 0, 0, .22);
+            pointer-events: none;
+            display: block;
+        }
+
+        /* legend-card.active 的 box-shadow 由 JS legendCardStyle 的 inline style 覆盖，
+   保留 transform / border-color，移除原 box-shadow 避免冲突 */
+        .legend-card.active {
+            border-color: #111;
+            transform: translateY(-4px) scale(1.08);
+            /* box-shadow 由 :style 动态给 */
+        }
+
+
+        .small-tip {
+            color: #667;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .stage-svg,
+        .stage-main-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            pointer-events: none;
+        }
+
+        .stage-main-canvas {
+            z-index: 1;
+        }
+
+        .stage-svg {
+            z-index: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div class="stage">
+            <svg ref="stageSvg" v-show="!settings.renderCanvas" class="stage-svg" :width="viewport.w"
+                :height="viewport.h" xmlns="http://www.w3.org/2000/svg">
+                <g :transform="stageTransform">
+                    <path v-for="tr in renderTerrains" :key="tr.key" :d="tr.d" :fill="tr.fill" :stroke="tr.stroke"
+                        :stroke-width="tr.strokeWidth" stroke-linecap="round" stroke-linejoin="round"
+                        :opacity="tr.opacity" style="pointer-events: none;" />
+                    <path v-for="layer in stableRenderLayers" :key="layer.key" :d="layer.d" :stroke="layer.stroke"
+                        :stroke-width="layer.strokeWidth" :stroke-dasharray="layer.dash"
+                        :stroke-linecap="layer.linecap || 'round'" stroke-linejoin="round" :opacity="layer.opacity"
+                        fill="none" style="pointer-events: none;" />
+
+                    <path v-for="layer in activeRenderLayers" :key="layer.key" :d="layer.d" :stroke="layer.stroke"
+                        :stroke-width="layer.strokeWidth" :stroke-dasharray="layer.dash"
+                        :stroke-linecap="layer.linecap || 'round'" stroke-linejoin="round" :opacity="layer.opacity"
+                        fill="none" style="pointer-events: none;" />
+
+                    <circle v-for="sta in renderStations" :key="sta.key" :cx="sta.x" :cy="sta.y" :r="sta.r"
+                        :fill="sta.fill" :stroke="sta.stroke" :stroke-width="sta.strokeWidth" :opacity="sta.opacity"
+                        style="pointer-events: none;" />
+<g
+    v-for="lb in renderTerrainLabels"
+    :key="lb.key"
+    v-html="lb.svgContent"
+    style="pointer-events:none;"
+></g>
+
+<g
+    v-for="lb in renderDistrictLabels"
+    :key="lb.key"
+    v-html="lb.svgContent"
+    style="pointer-events:none;"
+></g>
+                    <text v-for="name in renderNames" :key="name.key" :x="name.x" :y="name.y" :font-size="name.size"
+                        :fill="name.fill" :opacity="name.opacity ?? 1" text-anchor="middle" vector-effect="non-scaling-stroke"
+                        style="font-family: Arial, 'Microsoft YaHei', sans-serif; pointer-events: none;">
+                        <tspan v-if="parseStaNameLines(name.text).length === 1" :x="name.x" :dy="0"
+                            dominant-baseline="middle">{{ name.text }}</tspan>
+                        <template v-else>
+                            <tspan v-for="(lineText, li) in parseStaNameLines(name.text)" :key="name.key + '-' + li"
+                                :x="name.x" :dy="li === 0
+                        ? -(parseStaNameLines(name.text).length - 1) * 0.6 * name.size
+                        : 1.2 * name.size" dominant-baseline="middle">{{ lineText }}</tspan>
+                        </template>
+                    </text>
+                </g>
+            </svg>
+
+            <canvas ref="mainCanvas" v-show="settings.renderCanvas" class="stage-main-canvas"></canvas>
+
+            <canvas ref="minimapCanvas" class="minimap-canvas" :width="minimapSize" :height="minimapSize"></canvas>
+
+        </div>
+
+        <div class="tool" v-show="!(settings.hideButtonsWhenPlaying && playing)">
+
+
+            <button class="primary" @click="settingsOpen = true">设置</button>
+            <div class="row">
+                <button class="grow" @click="debugOpen = !debugOpen">{{ debugOpen ? '关闭调试信息' : '调试信息' }}</button>
+            </div>
+            <div class="row">
+                <button class="primary grow" @click="togglePlay">{{ playing ? '暂停' : '播放' }}</button>
+                <button @click="stopPlay">停止</button>
+            </div>
+           <input class="timeline" type="range" min="0" :max="Math.max(1,totalMs)" step="10"
+    v-model.number="playheadMs" @input="seekBySlider">
+            <div class="row" style="justify-content:center; gap:10px;">
+                <button @click="nudgeEvent(-1)" title="上一个事件" aria-label="上一个事件">◀️</button>
+                <button @click="nudgeEvent(1)" title="下一个事件" aria-label="下一个事件">▶️</button>
+            </div>
+
+<div class="row">
+    <span class="small-tip" style="white-space:nowrap;">播放倍速</span>
+    <input class="grow" type="number" min="0.01" max="100" step="0.1"
+        v-model.number="playSpeed"
+        @change="onPlaySpeedInput"
+        @blur="onPlaySpeedInput">
+    <span class="small-tip">×</span>
+</div>
+
+<div class="small-tip">空格：播放 / 暂停<br>进度：{{ formatDuration(playheadMs) }} / {{ formatDuration(totalMs) }}
+</div>
+            <div class="small-tip" v-if="runtimeReady">
+                事件数：{{ events.length }}<br>
+                总时长：{{ formatDuration(totalMs) }}
+            </div>
+        </div>
+
+
+
+        <div class="debug-panel" v-if="debugOpen" v-show="!(settings.hideButtonsWhenPlaying && playing)">
+            <h3>历史加载调试信息</h3>
+            <div class="debug-summary">
+                <div class="debug-chip"><span>已加载历史总数</span><strong>{{ debugHistory.total }}</strong></div>
+                <div class="debug-chip"><span>原始记录总数</span><strong>{{ debugHistory.rawTotal }}</strong></div>
+            </div>
+            <div class="debug-group" v-for="group in debugHistory.groups" :key="group.key">
+                <div class="debug-group-title"><span>{{ group.label }}</span><span>{{ group.loaded }} / 原始 {{ group.raw }}</span></div>
+                <div v-if="group.actions.length">
+                    <div class="debug-action-row" v-for="item in group.actions" :key="group.key + '-' + item.action">
+                        <span>{{ item.label }} <small>({{ item.action }})</small></span><strong>{{ item.count }}</strong>
+                    </div>
+                </div>
+                <div class="debug-empty" v-else>没有加载到该分类历史</div>
+            </div>
+            <div class="debug-note">
+                “已加载”指已成功解析时间并进入演示时间轴的事件；无效时间、找不到线路/站点、同名改名、站团尚未存在等记录不会计入。
+            </div>
+        </div>
+
+        <div class="hud-left" v-if="currentEvent"
+            :style="{ left: (settings.hideButtonsWhenPlaying && playing) ? '20px' : '260px' }">
+            <template v-if="currentEvent.eventType === 'lineMeta'">
+                <span class="line-badge" :style="{ background: currentEvent.lineBadgeColor || currentEvent.line?.color || '#888', color:'#fff' }">
+                    {{ currentEvent.lineBadgeName || currentEvent.line?.name || '?' }}
+                </span>
+            </template>
+            <template v-else-if="currentEvent.eventType === 'stationName'">
+                <template v-if="(currentEvent.activeLines || []).length">
+                    <span class="line-badge"
+                        v-for="lineInfo in currentEvent.activeLines"
+                        :key="'rename-line-' + lineInfo.id"
+                        :style="{ background: lineInfo.color || '#888', color: '#fff' }">
+                        {{ lineInfo.name }}
+                    </span>
+                </template>
+                <span v-else class="line-badge" :style="{ background: '#888', color: '#fff' }">未开通车站</span>
+            </template>
+            <span v-else class="line-badge" :style="{ background: currentEvent.lineBadgeColor || currentEvent.line?.color || currentEvent.rootLine?.color || '#888', color:'#fff' }">
+                {{ currentEvent.lineBadgeName || currentEvent.line?.name || currentEvent.rootLine?.name || '?' }}
+            </span>
+            <span class="event-desc">
+                {{ currentEvent.rangeText }}<template v-if="currentEvent.eventType !== 'stationName' && currentEvent.eventType !== 'lineMeta'"> {{ actionLabel(currentEvent.action) }}</template>
+            </span>
+        </div>
+
+        <div class="hud-right" :style="{ top: (minimapSize + 16) + 'px' }">
+            <div class="date">{{ currentDateText }}</div>
+            <div class="stat">里程 {{ totalOperatingKm.toFixed(1) }} km</div>
+            <div class="stat">站数 {{ totalOperatingStations }} 站</div>
+        </div>
+
+        <div class="legend" :style="legendGridStyle">
+            <div v-for="card in legendCards" :key="card.rootId" class="legend-card"
+                :class="{missing: !card.existsEver || !card.existsNow, gray: card.existsNow && card.km <= 0.0001, active: card.active}"
+                :style="legendCardStyle(card)">
+                <div>{{ card.label }}</div>
+                <div class="km">{{ card.km.toFixed(1) }} km</div>
+            </div>
+        </div>
+
+        <div v-if="settingsOpen" class="settings-mask" @click.self="settingsOpen=false">
+            <div class="settings">
+                <h2>设置</h2>
+                <table>
+                    <tbody>
+                        <!-- ── 播放偏好 ─────────────────────────────────────────── -->
+                        <tr>
+                            <td colspan="2"
+                                style="padding:4px 4px 2px;font-weight:700;font-size:25px;color:#aa0505;letter-spacing:.06em;">
+                                ─ 播放偏好 ─
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>线路列表自动合并</td>
+                            <td>
+                                <label style="margin-right:12px;"><input type="checkbox" v-model="settings.mergeSameColorLines"> 同色线路（默认开启）</label>
+                                <label style="margin-right:12px;"><input type="checkbox" v-model="settings.mergeSameNameLines"> 同名线路</label>
+                                <label><input type="checkbox" v-model="settings.mergeSameNumberLines"> 同编号线路</label>
+                                <div class="small-tip">合并后该图标的里程为成员线路里程之和；支线按其主线颜色参与“同色”判断。</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>线路合并优先级</td>
+                            <td>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                    <div v-for="(item,idx) in settings.mergePriorityOrder" :key="'merge-pri-'+item" draggable="true"
+                                        @dragstart="priorityDragStart('merge',idx,$event)" @dragover="priorityDragOver($event)" @drop="priorityDrop('merge',idx,$event)"
+                                        style="padding:7px 12px;border:1px solid #b9b9b9;border-radius:7px;background:#fff;cursor:grab;user-select:none;">
+                                        ☰ {{ idx+1 }}. {{ mergePriorityLabels[item] }}
+                                    </div>
+                                </div>
+                                <div class="small-tip">拖动板块调整优先级。默认：同色 ＞ 同名 ＞ 同编号；关闭的规则直接跳过。</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>线路事件优先级</td>
+                            <td>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                    <div v-for="(item,idx) in settings.segmentPriorityOrder" :key="'event-pri-'+item" draggable="true"
+                                        @dragstart="priorityDragStart('segment',idx,$event)" @dragover="priorityDragOver($event)" @drop="priorityDrop('segment',idx,$event)"
+                                        style="padding:7px 12px;border:1px solid #b9b9b9;border-radius:7px;background:#fff;cursor:grab;user-select:none;">
+                                        ☰ {{ idx+1 }}. {{ segmentPriorityLabels[item] }}
+                                    </div>
+                                </div>
+                                <div class="small-tip">拖动板块调整同日线路状态事件的兜底顺序；连续性排序优先于这里的设置。</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>连续事件直接衔接</td>
+                            <td>
+                                <label><input type="checkbox" v-model="settings.continuousChainNoGlobal"> 连续事件不进入全局视角（默认开启）</label>
+                                <div class="small-tip">同一时间、同一线路的状态/改名/改色事件组成连续链；开启后链中间不回全局视角，仅链尾进入全局视角。</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>年度全局视角</td>
+                            <td>
+                                <label><input type="checkbox" v-model="settings.onlyYearLastEventGlobal"> 只有一年的最后一个事件才进入全局视角</label>
+                                <div class="small-tip">默认关闭。开启后，同一年中只有时间轴上最后一个事件（若为连续链则为最后一条链）结束后才允许进入全局视角。</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>最小全局视角间隔</td>
+                            <td>
+                                <label style="margin-right:12px;"><input type="checkbox" v-model="settings.minGlobalIntervalEnabled"> 开启</label>
+                                <span v-if="settings.minGlobalIntervalEnabled">
+                                    至少间隔 <input type="number" v-model.number="settings.minGlobalIntervalDays" min="0" step="1" style="width:90px;"> 天
+                                </span>
+                                <span v-else class="small-tip">默认关闭；开启时默认 100 天。</span>
+                                <div class="small-tip">若当前事件日期距离上一次实际进入全局视角的事件日期不足该天数，则跳过本次全局视角。</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+    <td>渲染地形</td>
+    <td>
+        <input type="checkbox" v-model="settings.renderTerrain">
+    </td>
+</tr>
+
+<tr>
+    <td>渲染地形图例</td>
+    <td>
+        <input type="checkbox" v-model="settings.renderTerrainLabels">
+    </td>
+</tr>
+
+<tr>
+    <td>渲染行政区划图例</td>
+    <td>
+        <input type="checkbox" v-model="settings.renderDistrictLabels">
+    </td>
+</tr>
+                        <tr>
+                            <td>主画布 Canvas 渲染</td>
+                            <td>
+                                <label><input type="checkbox" v-model="settings.renderCanvas"> 开启</label>
+                                <div class="small-tip">
+                                    默认关闭。开启后主地图用 canvas 绘制，HUD、图例、缩略图不变；关闭后仍使用原 SVG 模式。
+                                </div>
+                            </td>
+                        </tr>
+                        <!-- ── 存档与数据 ─────────────────────────────────────────── -->
+                        <tr>
+                            <td colspan="2"
+                                style="padding:10px 4px 2px;font-weight:700;font-size:25px;color:#aa0505;letter-spacing:.06em;">
+                                ─ 存档与数据 ─
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>打开存档</td>
+                            <td>
+                                <select v-model="selectedWorkName" style="width:14em;">
+                                    <option value="">请选择</option>
+                                    <option v-for="w in workList" :key="w.key" :value="w.key">{{ w.label }}</option>
+                                </select>
+                                <button @click="openSelectedWork">打开</button>
+                                <button @click="refreshWorkList">刷新</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>从 JSON 导入</td>
+                            <td><input type="file" accept=".json,application/json" @change="importJsonFile"></td>
+                        </tr>
+                        <tr>
+                            <td>设为常用</td>
+                            <td><button @click="setCurrentAsCommon">设为常用</button> <span
+                                    class="small-tip">保存的是存档名字，不复制存档内容。</span></td>
+                        </tr>
+
+                        <!-- ── 播放与性能 ─────────────────────────────────────────── -->
+                        <tr>
+                            <td colspan="2"
+                                style="padding:10px 4px 2px;font-weight:700;font-size:25px;color:#aa0505;letter-spacing:.06em;">
+                                ─ 播放与性能 ─
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>播放时隐藏所有按钮</td>
+                            <td><label><input type="checkbox" v-model="settings.hideButtonsWhenPlaying"> 隐藏</label></td>
+                        </tr>
+                        <tr>
+                            <td>精细时间轴</td>
+                            <td>
+                                <input class="large-range" type="range" min="0" :max="Math.max(1,totalMs)" step="10"
+                                    v-model.number="playheadMs" @change="seekBySlider">
+                                <div class="small-tip">{{ formatDuration(playheadMs) }} / {{ formatDuration(totalMs) }}
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>建设速度</td>
+                            <td><input type="number" v-model.number="settings.buildSpeedKmPerSec" min="0.001"
+                                    step="0.1"> km/s，默认 2</td>
+                        </tr>
+                        <tr>
+                            <td>线路段更新后停顿</td>
+                            <td><input type="number" v-model.number="settings.segmentHoldSec" min="0" step="0.1"> 秒，默认 1
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>时间点后缩放到全局</td>
+                            <td><label><input type="checkbox" v-model="settings.fitGlobalAfterTime"> 开启，外扩 10%</label>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>移动到全局耗时</td>
+                            <td><input type="number" v-model.number="settings.globalMoveSec" min="0" step="0.1"> 秒，默认
+                                1.5</td>
+                        </tr>
+                        <tr>
+                            <td>全局停顿时间</td>
+                            <td><input type="number" v-model.number="settings.globalHoldSec" min="0" step="0.1"> 秒，默认 4
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>计算 Worker 数上限</td>
+                            <td>
+                                <input type="number" v-model.number="settings.maxWorkers" min="1" max="32" step="1">
+                                个，默认 10
+                                <div class="small-tip">实际目前主要用于预计算任务。数值越高不一定越快，后续大计算会按这个上限拆分。</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>渲染帧率上限</td>
+                            <td><input type="number" v-model.number="settings.renderFps" min="1" max="120" step="1">
+                                fps，默认 60（降低可大幅减轻 GPU/CPU 压力）</td>
+                        </tr>
+                        <tr>
+                            <td>视口边缘剔除</td>
+                            <td>
+                                <label><input type="checkbox" v-model="settings.enableCulling"> 启用</label>
+                                <div class="small-tip">跳过屏幕外线路段的图层构建，对长线路效果显著。</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>剔除外延范围</td>
+                            <td>
+                                <input type="number" v-model.number="settings.cullMarginKm" min="0" max="1000"
+                                    step="0.1" :disabled="!settings.enableCulling"> km，默认 0.2
+                                <div class="small-tip">视口边缘外再保留多少 km 的缓冲区，避免线路闪烁。</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>线路列表一行最多</td>
+                            <td><input type="number" v-model.number="settings.legendMaxPerRow" min="1" max="80"> 个，默认 25
+                            </td>
+                        </tr>
+
+                        <!-- ── 缩略图与显示 ─────────────────────────────────────────── -->
+                        <tr>
+                            <td colspan="2"
+                                style="padding:10px 4px 2px;font-weight:700;font-size:25px;color:#aa0505;letter-spacing:.06em;">
+                                ─ 缩略图与显示 ─
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>站名倍率</td>
+                            <td><input type="number" v-model.number="settings.stationNameScale" min="0.1" max="10"
+                                    step="0.1"> 倍，默认 1</td>
+                        </tr>
+                        <tr>
+                            <td>缩略图高度（屏幕占比）</td>
+                            <td><input type="number" v-model.number="settings.minimapHeightRatio" min="0.05" max="0.5"
+                                    step="0.01"> 默认 0.3</td>
+                        </tr>
+                        <tr>
+                            <td>缩略图最大等价视野</td>
+                            <td><input type="number" v-model.number="settings.minimapMaxViewKm" min="1" max="100000"
+                                    step="1"> km，默认 64</td>
+                        </tr>
+
+                        <!-- ── 相机阻尼 ─────────────────────────────────────────── -->
+                        <tr>
+                            <td colspan="2"
+                                style="padding:10px 4px 2px;font-weight:700;font-size:25px;color:#aa0505;letter-spacing:.06em;">
+                                ─ 相机阻尼 ─
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>到位距离阈值</td>
+                            <td><input type="number" v-model.number="settings.camSettleDistKm" min="0.01" max="1000"
+                                    step="0.1"> km，默认 1.0</td>
+                        </tr>
+                        <tr>
+                            <td>到位缩放阈值</td>
+                            <td><input type="number" v-model.number="settings.camSettleZoomRatio" min="0.01" max="1"
+                                    step="0.01"> 比例，默认 0.20</td>
+                        </tr>
+                        <tr>
+                            <td>到位后额外等待</td>
+                            <td><input type="number" v-model.number="settings.camSettleExtraWaitSec" min="0" max="30"
+                                    step="0.1"> 秒，默认 0.5</td>
+                        </tr>
+                        <tr>
+                            <td>建设阶段最大速度倍率</td>
+                            <td><input type="number" v-model.number="settings.camBuildMaxSpdMult" min="1" max="10000"
+                                    step="1"> ×，默认 8</td>
+                        </tr>
+                        <tr>
+                            <td>全局移动最大速度倍率</td>
+                            <td><input type="number" v-model.number="settings.camGlobalMaxSpdMult" min="1" max="10000"
+                                    step="1"> ×，默认 25</td>
+                        </tr>
+
+                        <!-- ── 相机高级参数（可折叠） ─────────────────────────── -->
+                        <tr>
+                            <td colspan="2">
+                                <details style="margin-top:4px;">
+                                    <summary style="cursor:pointer;font-size:13px;color:#667;padding:4px 0;">
+                                        高级相机参数（展开）
+                                    </summary>
+                                    <table style="width:100%;border-collapse:collapse;margin-top:6px;">
+                                        <tr>
+                                            <td style="padding:5px 4px;font-size:13px;">建设相机前瞻</td>
+                                            <td style="padding:5px 4px;font-size:13px;">
+                                                <input type="number" v-model.number="settings.camLookAheadSec" min="0"
+                                                    max="10" step="0.1"> 秒，默认 0.5
+                                                <div class="small-tip">前瞻让相机提前对准曲线，越长/越弯的线路效果越明显。<br>设为 0 =
+                                                    精确跟踪尖端（可能抖动）；设为 1+ = 更平滑但会超前。</div>
+                                            </td>
+                                        </tr>
+                                        <tr style="border-bottom:1px solid #edf2f7;">
+                                            <td style="padding:5px 4px;font-size:13px;">建设接近速率</td>
+                                            <td style="padding:5px 4px;font-size:13px;">
+                                                <input type="number" v-model.number="settings.camBuildApproach"
+                                                    min="0.1" max="200" step="0.1" style="width:6em;"> s⁻¹，默认 3.5
+                                            </td>
+                                        </tr>
+                                        <tr style="border-bottom:1px solid #edf2f7;">
+                                            <td style="padding:5px 4px;font-size:13px;">建设方向混合速率</td>
+                                            <td style="padding:5px 4px;font-size:13px;">
+                                                <input type="number" v-model.number="settings.camBuildDirBlend"
+                                                    min="0.1" max="200" step="0.1" style="width:6em;"> 默认 3（越小方向惯性越强）
+                                            </td>
+                                        </tr>
+                                        <tr style="border-bottom:1px solid #edf2f7;">
+                                            <td style="padding:5px 4px;font-size:13px;">全局接近速率</td>
+                                            <td style="padding:5px 4px;font-size:13px;">
+                                                <input type="number" v-model.number="settings.camGlobalApproach"
+                                                    min="0.1" max="200" step="0.5" style="width:6em;"> s⁻¹，默认 12
+                                            </td>
+                                        </tr>
+                                        <tr style="border-bottom:1px solid #edf2f7;">
+                                            <td style="padding:5px 4px;font-size:13px;">全局方向混合速率</td>
+                                            <td style="padding:5px 4px;font-size:13px;">
+                                                <input type="number" v-model.number="settings.camGlobalDirBlend"
+                                                    min="0.1" max="200" step="1" style="width:6em;"> 默认 15
+                                            </td>
+                                        </tr>
+                                        <tr style="border-bottom:1px solid #edf2f7;">
+                                            <td style="padding:5px 4px;font-size:13px;">建设缩放接近速率</td>
+                                            <td style="padding:5px 4px;font-size:13px;">
+                                                <input type="number" v-model.number="settings.camZoomBuildApproach"
+                                                    min="0.1" max="200" step="0.5" style="width:6em;"> 默认 4
+                                            </td>
+                                        </tr>
+                                        <tr style="border-bottom:1px solid #edf2f7;">
+                                            <td style="padding:5px 4px;font-size:13px;">建设缩放混合速率</td>
+                                            <td style="padding:5px 4px;font-size:13px;">
+                                                <input type="number" v-model.number="settings.camZoomBuildDirBlend"
+                                                    min="0.1" max="200" step="0.5" style="width:6em;"> 默认 5
+                                            </td>
+                                        </tr>
+                                        <tr style="border-bottom:1px solid #edf2f7;">
+                                            <td style="padding:5px 4px;font-size:13px;">建设缩放最大速度</td>
+                                            <td style="padding:5px 4px;font-size:13px;">
+                                                <input type="number" v-model.number="settings.camZoomBuildMaxLogspd"
+                                                    min="0.01" max="20" step="0.1" style="width:6em;"> oct/s，默认 1.5
+                                            </td>
+                                        </tr>
+                                        <tr style="border-bottom:1px solid #edf2f7;">
+                                            <td style="padding:5px 4px;font-size:13px;">全局缩放接近速率</td>
+                                            <td style="padding:5px 4px;font-size:13px;">
+                                                <input type="number" v-model.number="settings.camZoomGlobalApproach"
+                                                    min="0.1" max="200" step="0.5" style="width:6em;"> 默认 12
+                                            </td>
+                                        </tr>
+                                        <tr style="border-bottom:1px solid #edf2f7;">
+                                            <td style="padding:5px 4px;font-size:13px;">全局缩放混合速率</td>
+                                            <td style="padding:5px 4px;font-size:13px;">
+                                                <input type="number" v-model.number="settings.camZoomGlobalDirBlend"
+                                                    min="0.1" max="200" step="1" style="width:6em;"> 默认 15
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding:5px 4px;font-size:13px;">全局缩放最大速度</td>
+                                            <td style="padding:5px 4px;font-size:13px;">
+                                                <input type="number" v-model.number="settings.camZoomGlobalMaxLogspd"
+                                                    min="0.01" max="20" step="0.1" style="width:6em;"> oct/s，默认 3.0
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </details>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+                    <button @click="saveSettings">保存设置</button>
+                    <button @click="settingsOpen=false">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="./linelable-v260514.js?v=20260729-line-history-perf-2"></script>
+    <script src="./lablecanvas.js?v=20260729-hud-temporal-refactor-1"></script>
+    <script src="./bshistoryzidai.js?v=20260729-hud-temporal-refactor-1"></script>
+    <script src="./bshistorycanvas-v10.js?v=20260729-line-history-perf-2"></script>
+    <script src="./bshistory-v12.js?v=20260731-global-policy-1"></script>
+</body>
+
+</html>
